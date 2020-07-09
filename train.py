@@ -79,7 +79,7 @@ def train_end2end(n_epochs=3000,
         # switch to train mode
         model.train()
         batch_id = 0
-        for sentences, masks, labels in train_loader:
+        for sentences, masks, labels, sentences_list in train_loader:
             optimizer.zero_grad()
             pred_labels = model.forward(sentences, masks)
             loss = F.binary_cross_entropy(torch.sigmoid(pred_labels.view(-1).float()), labels.float())

@@ -53,7 +53,7 @@ class IntentDataset(Dataset):
             # label is followup, initiator, or noninitiator
             sentence_labels.append(self.label_list.index(label))
         sentence_labels = torch.LongTensor(sentence_labels).to(self.device)
-        return sentence_tensors, masks, sentence_labels
+        return sentence_tensors, masks, sentence_labels, sentences_list
 
 
 def gen_sentence_tensors(sentence_list, device, bert_model):

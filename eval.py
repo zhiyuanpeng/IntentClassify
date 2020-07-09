@@ -6,6 +6,8 @@ from dataset import IntentDataset
 from utils.path_util import from_project_root
 from utils.torch_util import binary_p_r_f1
 
+id_dict = {0: 'negative', 1: 'positive'}
+
 
 def evaluate(model, data_url):
     """
@@ -23,8 +25,9 @@ def evaluate(model, data_url):
     model.eval()
     total_pred_labels = []
     total_labels = []
+    total_sentences = []
     with torch.no_grad():
-        for sentences, masks, labels in loader:
+        for sentences, masks, labels, sentences_list in loader:
             try:
                 pred_labels_output = model.forward(sentences, masks)
                 # argmax is for multi class
@@ -37,14 +40,24 @@ def evaluate(model, data_url):
             pred_labels_cpu = list(pred_labels.view(-1).cpu().numpy())
             total_pred_labels += pred_labels_cpu
             total_labels += labels_cpu
+            total_sentences += sentences_list
+        write_predict_result(total_sentences, total_labels, total_pred_labels)
+        # with open("./data/SST2/pred_result.txt", 'a+') as
         precision, recall, f1 = binary_p_r_f1(np.array(total_labels), np.array(total_pred_labels))
         print("Precision is %.4f, Recall is %.4f, F1 is %.4f" % (precision, recall, f1))
     return precision
 
 
+def write_predict_result(total_sentences, total_labels, total_pred_labels):
+    with open("./data/SST2/final_result.txt", "a+") as f:
+        for sentence, real, pred in zip(total_sentences, total_labels, total_pred_labels):
+            result = " ".join(sentence) + "\t" + id_dict[real] + "\t" + id_dict[pred] + "\n"
+            f.write(result)
+
+
 def main():
-    model_url = from_project_root("data/model/lr0.000500_stop10_end2end_model_epoch52_0.722995.pt")
-    test_url = from_project_root("data/Ali/Ali-test.iob2")
+    model_url = from_project_root("data/model/lr0.000020_stop10_epoch5_0.937028.pt")
+    test_url = from_project_root("data/SST2/test.txt")
     model = torch.load(model_url)
     evaluate(model, test_url)
     pass
