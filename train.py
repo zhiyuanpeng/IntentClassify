@@ -2,12 +2,13 @@ import os
 import torch
 import json
 import numpy as np
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from datetime import datetime
-from utils.path_util import from_project_root, exists
+from utils.path_util import from_project_root
 from utils.torch_util import get_device
-from dataset import NERDataset, gen_vocab_from_data
-from models.ner import CallNoteNER
+from dataset import IntentDataset
+from models.IntentClassify import BertSentClassify
 from eval import evaluate
 from utils.torch_util import set_random_seed
 RANDOM_SEED = 233
@@ -15,16 +16,15 @@ set_random_seed(RANDOM_SEED)
 
 
 EARLY_STOP = 10
-LR = 0.001
+LR = 2e-5
 BATCH_SIZE = 32
 MAX_GRAD_NORM = 5
 N_TAGS = 9
 LOG_PER_BATCH = 10
 
-TRAIN_URL = from_project_root("data/CoNLL2003/conll2003_train.bio")
-DEV_URL = from_project_root("data/CoNLL2003/conll2003_dev.bio")
-TEST_URL = from_project_root("data/CoNLL2003/conll2003_test.bio")
-CHAE_URL = from_project_root("data/CoNLL2003/char_vocab.json")
+TRAIN_URL = from_project_root("data/SST2/train.txt")
+DEV_URL = from_project_root("data/SST2/dev.txt")
+TEST_URL = from_project_root("data/SST2/test.txt")
 
 
 def train_end2end(n_epochs=3000,
@@ -58,17 +58,18 @@ def train_end2end(n_epochs=3000,
     start_time = datetime.now()
 
     device = get_device(device)
-    train_set = NERDataset(train_url, device=device, bert_model='bert-base-uncased')
+    train_set = IntentDataset(train_url, device=device, bert_model='bert-base-uncased')
     train_loader = DataLoader(train_set, batch_size=batch_size, drop_last=False,
                               collate_fn=train_set.collate_func)
-    # N_TAGS labels and the hidden_size on top of embedding is 200
-    model = CallNoteNER(N_TAGS, 200)
+    # pass # of tags
+    model = BertSentClassify(1)
 
     if device.type == 'cuda':
         print("using gpu,", torch.cuda.device_count(), "gpu(s) available!\n")
     else:
         print("using cpu\n")
     model = model.to(device)
+    criterion = F.cross_entropy
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     cnt = 0
@@ -78,20 +79,11 @@ def train_end2end(n_epochs=3000,
         # switch to train mode
         model.train()
         batch_id = 0
-        for data, sentence_labels in train_loader:
+        for sentences, masks, labels in train_loader:
             optimizer.zero_grad()
-            pred_sentence_labels = model.forward(*data)
-            # change pred_sentence_labels to (batch_size, seq_length, num_tags)
-            sentence_len = data[1]
-            crf_mask = np.array([[True for i in range(sentence_len[0])] for j in range(len(sentence_len))])
-            for sent_index in range(len(sentence_len)):
-                if sentence_len[sent_index] < sentence_len[0]:
-                    crf_mask[sent_index, sentence_len[sent_index]:] = False
-            crf_mask = torch.from_numpy(crf_mask)
-            loss = - model.crf(pred_sentence_labels.permute(0, 2, 1), sentence_labels,
-                               mask=crf_mask.to(device), reduction='mean')
+            pred_labels = model.forward(sentences, masks)
+            loss = F.binary_cross_entropy(torch.sigmoid(pred_labels.view(-1).float()), labels.float())
             loss.backward()
-
             # gradient clipping
             if clip_norm > 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_norm)
@@ -129,11 +121,7 @@ def train_end2end(n_epochs=3000,
 
 
 def main():
-    start_time = datetime.now()
-    if CHAE_URL and not exists(CHAE_URL):
-        gen_vocab_from_data([TRAIN_URL, DEV_URL, TEST_URL])
-    train_end2end(test_url=TEST_URL)
-    print("finished in:", datetime.now() - start_time)
+    train_end2end()
     pass
 
 

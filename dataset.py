@@ -7,7 +7,8 @@ import transformers as ppb
 
 from utils.path_util import from_project_root, dirname
 
-LABEL_LIST = ['followup', 'initiator', 'noninitiator']
+# LABEL_LIST = ['followup', 'initiator', 'noninitiator']
+LABEL_LIST = ['0', '1']
 
 
 class IntentDataset(Dataset):
@@ -45,14 +46,14 @@ class IntentDataset(Dataset):
         sentences: [sentence1, sentence2, ...]
                    sentence1 = [word1, word2, ...] sentence1 is the longest sent in batch, other sents are padded
         """
-        sentence_tensors = gen_sentence_tensors(sentences_list, self.device, self.data_url, self.bert_model)
+        sentence_tensors, masks = gen_sentence_tensors(sentences_list, self.device, self.bert_model)
         # (sentences, sentence_lengths, sentence_words, sentence_word_lengths, sentence_word_indices)
         sentence_labels = list()
         for label in labels_list:
             # label is followup, initiator, or noninitiator
             sentence_labels.append(self.label_list.index(label))
         sentence_labels = torch.LongTensor(sentence_labels).to(self.device)
-        return sentence_tensors, sentence_labels
+        return sentence_tensors, masks, sentence_labels
 
 
 def gen_sentence_tensors(sentence_list, device, bert_model):
@@ -65,18 +66,24 @@ def gen_sentence_tensors(sentence_list, device, bert_model):
                sentence1 = [word1, word2, ...] sentence1 is the longest sent in batch, other sents are padded
     """
     sentences = list()
+    masks = list()
     # initialize the tokenizer
     bert_tokenizer = ppb.BertTokenizer.from_pretrained(bert_model)
     for sent in sentence_list:
         # word to word id
         # for intent classification, we need to add the special tokens
         sentence = torch.LongTensor(bert_tokenizer.encode(sent, add_special_tokens=True)).to(device)
+        shape = sentence.shape
+        mask = [1 for i in range(list(sentence.shape)[0])]
+        mask = torch.LongTensor(mask).to(device)
         sentences.append(sentence)
+        masks.append(mask)
 
     # (batch_size)
     sentences = pad_sequence(sentences, batch_first=True).to(device)
+    masks = pad_sequence(masks, batch_first=True).to(device)
     # (batch_size, max_sent_len)
-    return sentences
+    return sentences, masks
 
 
 def load_raw_data(data_url, update=False):
@@ -103,7 +110,7 @@ def load_raw_data(data_url, update=False):
 
 
 def main():
-    data_urls = from_project_root("data/callnote/next_note.txt")
+    data_urls = from_project_root("data/SST2/train.txt")
     load_raw_data(data_urls)
     pass
 

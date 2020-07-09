@@ -75,6 +75,16 @@ def binary_f1_score(y_true, y_pred):
     return precision*num_gold, recall*num_gold, f1*num_gold
 
 
+def binary_p_r_f1(y_true, y_pred):
+    num_proposed = y_pred.sum()
+    num_correct = np.logical_and(y_true, y_pred).sum()
+    num_gold = y_true.sum()
+    precision = 0 if num_proposed == 0 else num_correct / num_proposed
+    recall = 0 if num_gold == 0 else num_correct / num_gold
+    f1 = 0 if (precision + recall) == 0 else 2 * precision * recall / (precision + recall)
+    return precision, recall, f1
+
+
 def main():
     y_true = np.array([0,0,0,1,1,1,2,2,2,3,3,3])
     y_pred = np.array([0,0,1,0,1,2,3,2,2,1,3,3])
